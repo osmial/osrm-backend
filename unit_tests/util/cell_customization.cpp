@@ -62,7 +62,7 @@ BOOST_AUTO_TEST_CASE(two_level_test)
 {
     // node:                0  1  2  3
     std::vector<CellID> l1{{0, 0, 1, 1}};
-    PackedMultiLevelPartition mlp{{l1}, {2}};
+    PackedMultiLevelPartition<false> mlp{{l1}, {2}};
 
     BOOST_REQUIRE_EQUAL(mlp.GetNumberOfLevels(), 2);
 
@@ -70,7 +70,7 @@ BOOST_AUTO_TEST_CASE(two_level_test)
 
     auto graph = makeGraph(edges);
 
-    CellStorage storage(mlp, graph);
+    CellStorage<false> storage(mlp, graph);
     CellCustomizer customizer(mlp);
 
     auto cell_1_0 = storage.GetCell(1, 0);
@@ -117,7 +117,7 @@ BOOST_AUTO_TEST_CASE(four_levels_test)
     std::vector<CellID> l1{{0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3}};
     std::vector<CellID> l2{{0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1}};
     std::vector<CellID> l3{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
-    PackedMultiLevelPartition mlp{{l1, l2, l3}, {4, 2, 1}};
+    PackedMultiLevelPartition<false> mlp{{l1, l2, l3}, {4, 2, 1}};
 
     BOOST_REQUIRE_EQUAL(mlp.GetNumberOfLevels(), 4);
 
@@ -147,7 +147,7 @@ BOOST_AUTO_TEST_CASE(four_levels_test)
 
     auto graph = makeGraph(edges);
 
-    CellStorage storage(mlp, graph);
+    CellStorage<false> storage(mlp, graph);
 
     auto cell_1_0 = storage.GetCell(1, 0);
     auto cell_1_1 = storage.GetCell(1, 1);
@@ -264,7 +264,7 @@ BOOST_AUTO_TEST_CASE(four_levels_test)
     CHECK_EQUAL_RANGE(cell_2_1.GetInWeight(9), 0, INVALID_EDGE_WEIGHT);
     CHECK_EQUAL_RANGE(cell_2_1.GetInWeight(12), INVALID_EDGE_WEIGHT, 10);
 
-    CellStorage storage_rec(mlp, graph);
+    CellStorage<false> storage_rec(mlp, graph);
     customizer.Customize(graph, storage_rec);
 
     CHECK_EQUAL_COLLECTIONS(cell_2_1.GetOutWeight(9), storage_rec.GetCell(2, 1).GetOutWeight(9));

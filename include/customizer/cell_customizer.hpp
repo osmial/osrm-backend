@@ -4,6 +4,7 @@
 #include "util/binary_heap.hpp"
 #include "util/cell_storage.hpp"
 #include "util/multi_level_partition.hpp"
+#include "util/timing_util.hpp"
 
 #include <boost/thread/tss.hpp>
 #include <unordered_set>
@@ -15,13 +16,14 @@ namespace customizer
 
 class CellCustomizer
 {
+    using CellStorage = osrm::util::CellStorage<false>;
 
   public:
     CellCustomizer(const osrm::util::MultiLevelPartition &partition) : partition(partition) {}
 
     template <typename GraphT>
     void Customize(const GraphT &graph,
-                   osrm::util::CellStorage &cells,
+                   CellStorage &cells,
                    osrm::util::LevelID level,
                    osrm::util::CellID id)
     {
@@ -61,10 +63,11 @@ class CellCustomizer
         }
     }
 
-    template <typename GraphT> void Customize(const GraphT &graph, osrm::util::CellStorage &cells)
+    template <typename GraphT> void Customize(const GraphT &graph, CellStorage &cells)
     {
         for (std::size_t level = 1; level < partition.GetNumberOfLevels(); ++level)
         {
+            TIMER_START(level_customization);
             tbb::parallel_for(tbb::blocked_range<std::size_t>(0, partition.GetNumberOfCells(level)),
                               [&](const tbb::blocked_range<std::size_t> &range) {
                                   for (auto id = range.begin(), end = range.end(); id != end; ++id)
@@ -72,6 +75,9 @@ class CellCustomizer
                                       Customize(graph, cells, level, id);
                                   }
                               });
+            TIMER_STOP(level_customization);
+            util::Log() << "Level " << level << " customization took "
+                        << TIMER_SEC(level_customization) << " seconds";
         }
     }
 
@@ -85,7 +91,7 @@ class CellCustomizer
 
     template <bool first_level, typename GraphT>
     void RelaxNode(const GraphT &graph,
-                   const osrm::util::CellStorage &cells,
+                   const CellStorage &cells,
                    Heap &heap,
                    osrm::util::LevelID level,
                    osrm::util::CellID id,
