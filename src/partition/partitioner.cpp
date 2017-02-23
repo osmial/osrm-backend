@@ -151,7 +151,16 @@ int Partitioner::Run(const PartitionConfig &config)
     // Then loads the edge based graph tanslates the partition and modifies it.
     // For details see #3205
 
-    auto mapping = LoadNodeBasedGraphToEdgeBasedGraphMapping(config.cnbg_ebg_mapping_path.string());
+    { // TODO: remove later
+        const auto &node_based_partition_ids = recursive_bisection.BisectionIDs();
+        const auto fingerprint = storage::io::FileWriter::GenerateFingerprint;
+        storage::io::FileWriter writer{config.base_path.string() + ".debug_nbp_ids", fingerprint};
+        writer.WriteOne<std::uint32_t>(recursive_bisection.SCCDepth());
+        writer.SerializeVector(node_based_partition_ids);
+    }
+
+    /* TODO: move code from customizer
+    auto mapping = LoadNodeBasedGraphToEdgeBasedGraphMapping(config.nbg_ebg_mapping_path.string());
     util::Log() << "Loaded node based graph to edge based graph mapping";
 
     auto edge_based_graph = LoadEdgeBasedGraph(config.edge_based_graph_path.string());
@@ -191,14 +200,12 @@ int Partitioner::Run(const PartitionConfig &config)
                     node_based_partition_ids[other_node_based_nodes.u] !=
                         node_based_partition_ids[u])
                 { // use id of other u if [other_u, other_v] -> [u,v] is in other partition as u
-                    std::cout << "=== case 1 for node " << node << "\n";
                     edge_based_partition_ids[node] =
                         node_based_partition_ids[other_node_based_nodes.u];
                 }
                 // if (data.forward && node_based_partition_ids[v] !=
                 // node_based_partition_ids[other_node_based_nodes.v])
                 // { // use id of other v if [u,v] -> [other_u, other_v] is in other partition as v
-                //     std::cout << "=== case 2 for node " << node << "\n";
                 //     edge_based_partition_ids[node] =
                 //     node_based_partition_ids[other_node_based_nodes.v];
                 // }
@@ -269,7 +276,7 @@ int Partitioner::Run(const PartitionConfig &config)
         int mask_from = sizeof(BisectionID) * CHAR_BIT - recursive_bisection.SCCDepth();
         boost::container::small_vector<BisectionID, 8> level_masks;
         for (int mask_to = sizeof(BisectionID) * CHAR_BIT; mask_to > first_nonzero_position;
-             mask_to = mask_from, mask_from -= 3) // TODO: find better grouping
+             mask_to = mask_from, mask_from -= 7) // TODO: find better grouping
         {
             auto bit = std::max(first_nonzero_position, mask_from);
             level_masks.push_back(((1u << (sizeof(BisectionID) * CHAR_BIT - bit)) - 1) << bit);
@@ -307,10 +314,10 @@ int Partitioner::Run(const PartitionConfig &config)
         std::cout << "# of cell on levels\n";
         for (std::size_t level = 0; level < partition_sets.size(); ++level)
         {
-            std::cout << level_to_num_cells[level] << ": ";
-            for (auto x : partition_sets[level])
-                std::cout << " " << x;
-            std::cout << "\n";
+            std::cout << level_to_num_cells[level] << "\n";
+        //     for (auto x : partition_sets[level])
+        //         std::cout << " " << x;
+        //     std::cout << "\n";
         }
 
         TIMER_START(packed_mlp);
@@ -337,6 +344,7 @@ int Partitioner::Run(const PartitionConfig &config)
         TIMER_STOP(writing_mld_data);
         util::Log() << "MLD data writing took " << TIMER_SEC(writing_mld_data) << " seconds";
     }
+    */
 
     return 0;
 }
