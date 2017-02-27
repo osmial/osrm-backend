@@ -19,6 +19,8 @@
 #include "util/string_util.hpp"
 #include "util/string_view.hpp"
 #include "util/typedefs.hpp"
+#include "util/cell_storage.hpp"
+#include "util/multi_level_partition.hpp"
 
 #include "osrm/coordinate.hpp"
 
@@ -202,6 +204,11 @@ class BaseDataFacade
     virtual EntryClassID GetEntryClassID(const EdgeID eid) const = 0;
 
     virtual util::guidance::EntryClass GetEntryClass(const EntryClassID entry_class_id) const = 0;
+
+    virtual const util::PackedMultiLevelPartition<true> &GetMultiLevelPartition() const = 0;
+
+    virtual const util::CellStorage<true> &GetCellStorage() const = 0;
+
 };
 }
 }

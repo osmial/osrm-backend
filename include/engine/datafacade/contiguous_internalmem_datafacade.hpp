@@ -14,12 +14,10 @@
 #include "util/guidance/turn_lanes.hpp"
 
 #include "engine/geospatial_query.hpp"
-#include "util/cell_storage.hpp"
 #include "util/exception.hpp"
 #include "util/exception_utils.hpp"
 #include "util/guidance/turn_bearing.hpp"
 #include "util/log.hpp"
-#include "util/multi_level_partition.hpp"
 #include "util/name_table.hpp"
 #include "util/packed_vector.hpp"
 #include "util/range_table.hpp"
@@ -1035,12 +1033,12 @@ class ContiguousInternalMemoryDataFacade : public BaseDataFacade
                     m_lane_description_offsets[lane_description_id + 1]);
     }
 
-    const util::PackedMultiLevelPartition<true> &GetMultiLevelPartition() const
+    const util::PackedMultiLevelPartition<true> &GetMultiLevelPartition() const override final
     {
         return mld_partition;
     }
 
-    const util::CellStorage<true> &GetCellStorage() const { return mld_cell_storage; }
+    const util::CellStorage<true> &GetCellStorage() const override final { return mld_cell_storage; }
 };
 }
 }

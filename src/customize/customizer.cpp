@@ -184,7 +184,7 @@ void PartionerOutputCustomizationData(const CustomizationConfig &config)
         std::cout << std::setw(8) << std::hex << x << std::dec << "\n";
 
     // collect cell ids as masked bisection ids
-    std::vector<std::size_t> level_to_num_cells;
+    std::vector<std::uint32_t> level_to_num_cells;
     std::vector<std::vector<osrm::util::CellID>> partitions(
         level_masks.size(), std::vector<osrm::util::CellID>(edge_based_partition_ids.size()));
     std::vector<std::unordered_set<osrm::util::CellID>> partition_sets(level_masks.size());

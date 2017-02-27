@@ -8,6 +8,7 @@
 #include "engine/routing_algorithms/alternative_path.hpp"
 #include "engine/routing_algorithms/direct_shortest_path.hpp"
 #include "engine/routing_algorithms/shortest_path.hpp"
+#include "engine/routing_algorithms/mld_shortest_path.hpp"
 #include "engine/search_engine_data.hpp"
 #include "util/json_container.hpp"
 
@@ -29,6 +30,7 @@ class ViaRoutePlugin final : public BasePlugin
 {
   private:
     mutable SearchEngineData heaps;
+    mutable routing_algorithms::MultiLayerDijkstraRouting mld_shortest_path;
     mutable routing_algorithms::ShortestPathRouting shortest_path;
     mutable routing_algorithms::AlternativeRouting alternative_path;
     mutable routing_algorithms::DirectShortestPathRouting direct_shortest_path;

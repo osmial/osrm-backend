@@ -22,7 +22,7 @@ namespace plugins
 {
 
 ViaRoutePlugin::ViaRoutePlugin(int max_locations_viaroute)
-    : shortest_path(heaps), alternative_path(heaps), direct_shortest_path(heaps),
+    : mld_shortest_path(heaps), shortest_path(heaps), alternative_path(heaps), direct_shortest_path(heaps),
       max_locations_viaroute(max_locations_viaroute)
 {
 }
@@ -92,7 +92,8 @@ Status ViaRoutePlugin::HandleRequest(const std::shared_ptr<const datafacade::Bas
         }
         else
         {
-            direct_shortest_path(facade, raw_route.segment_end_coordinates, raw_route);
+            mld_shortest_path(facade, raw_route.segment_end_coordinates, raw_route);
+            //direct_shortest_path(facade, raw_route.segment_end_coordinates, raw_route);
         }
     }
     else
