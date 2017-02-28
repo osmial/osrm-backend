@@ -250,6 +250,30 @@ void BasicRoutingInterface::Search(const std::shared_ptr<const datafacade::BaseD
         return;
     }
 
+    {
+        std::cout << "Original routing\n";
+        {
+            std::cout << "forward heap\n";
+            NodeID node = middle;
+            while (forward_heap.GetData(node).parent != node)
+            {
+                std::cout << " node " << node << " weight " << forward_heap.GetKey(node) << "\n";
+                node = forward_heap.GetData(node).parent;
+            }
+            std::cout << " node " << node << " weight " << forward_heap.GetKey(node) << "\n";
+        }
+        {
+            std::cout << "reverse heap\n";
+            NodeID node = middle;
+            while (reverse_heap.GetData(node).parent != node)
+            {
+                std::cout << " node " << node << " weight " << reverse_heap.GetKey(node) << "\n";
+                node = reverse_heap.GetData(node).parent;
+            }
+            std::cout << " node " << node << " weight " << reverse_heap.GetKey(node) << "\n";
+        }
+    }
+
     // Was a paths over one of the forward/reverse nodes not found?
     BOOST_ASSERT_MSG((SPECIAL_NODEID != middle && INVALID_EDGE_WEIGHT != weight), "no path found");
 

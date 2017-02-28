@@ -107,11 +107,12 @@ template <bool UseShareMemory> class CellStorage
       public:
         auto GetOutWeight(NodeID node) const
         {
-            auto iter = std::find(source_boundary, source_boundary + num_source_nodes, node);
-            if (iter == source_boundary + num_source_nodes)
+            auto first = source_boundary, last = source_boundary + num_source_nodes;
+            auto iter = std::find(first, last, node);
+            if (iter == last)
                 return boost::make_iterator_range(weights, weights);
 
-            auto row = std::distance(source_boundary, iter);
+            auto row = std::distance(first, iter);
             auto begin = weights + num_destination_nodes * row;
             auto end = begin + num_destination_nodes;
             return boost::make_iterator_range(begin, end);
@@ -119,12 +120,12 @@ template <bool UseShareMemory> class CellStorage
 
         auto GetInWeight(NodeID node) const
         {
-            auto iter =
-                std::find(destination_boundary, destination_boundary + num_destination_nodes, node);
-            if (iter == destination_boundary + num_destination_nodes)
+            auto first = destination_boundary, last = destination_boundary + num_destination_nodes;
+            auto iter = std::find(first, last, node);
+            if (iter == last)
                 return boost::make_iterator_range(ColumnIterator{}, ColumnIterator{});
 
-            auto column = std::distance(destination_boundary, iter);
+            auto column = std::distance(first, iter);
             auto begin = ColumnIterator{weights + column, num_destination_nodes};
             auto end = ColumnIterator{weights + column + num_source_nodes * num_destination_nodes,
                                       num_destination_nodes};

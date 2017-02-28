@@ -871,8 +871,9 @@ void Storage::PopulateData(const DataLayout &layout, char *memory_ptr)
         const auto mld_partition_size = layout.GetBlockSize(DataLayout::MLD_CELL_PARTITION);
         if (boost::filesystem::exists(config.mld_partition_path))
         {
-            util::PackedMultiLevelPartition<true>().Read(
-                config.mld_partition_path, mld_partition_ptr, mld_partition_ptr + mld_partition_size);
+            util::PackedMultiLevelPartition<true>().Read(config.mld_partition_path,
+                                                         mld_partition_ptr,
+                                                         mld_partition_ptr + mld_partition_size);
         }
 
         const auto mld_cell_storage_ptr =
@@ -881,8 +882,8 @@ void Storage::PopulateData(const DataLayout &layout, char *memory_ptr)
         if (boost::filesystem::exists(config.mld_storage_path))
         {
             util::CellStorage<true>().Read(config.mld_storage_path,
-                                       mld_cell_storage_ptr,
-                                       mld_cell_storage_ptr + mld_cell_storage_size);
+                                           mld_cell_storage_ptr,
+                                           mld_cell_storage_ptr + mld_cell_storage_size);
         }
     }
 }

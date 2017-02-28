@@ -434,11 +434,12 @@ class ContiguousInternalMemoryDataFacade : public BaseDataFacade
     {
         if (data_layout.GetBlockSize(storage::DataLayout::MLD_CELL_PARTITION) > 0)
         {
-            auto mld_partition_ptr =
-                data_layout.GetBlockPtr<char>(memory_block, storage::DataLayout::MLD_CELL_PARTITION);
+            auto mld_partition_ptr = data_layout.GetBlockPtr<char>(
+                memory_block, storage::DataLayout::MLD_CELL_PARTITION);
             mld_partition.InitializePointers(
                 mld_partition_ptr,
-                mld_partition_ptr + data_layout.num_entries[storage::DataLayout::MLD_CELL_PARTITION]);
+                mld_partition_ptr +
+                    data_layout.num_entries[storage::DataLayout::MLD_CELL_PARTITION]);
         }
 
         if (data_layout.GetBlockSize(storage::DataLayout::MLD_CELL_STORAGE) > 0)
@@ -447,7 +448,8 @@ class ContiguousInternalMemoryDataFacade : public BaseDataFacade
                 data_layout.GetBlockPtr<char>(memory_block, storage::DataLayout::MLD_CELL_STORAGE);
             mld_cell_storage.InitializePointers(
                 mld_cell_storage_ptr,
-                mld_cell_storage_ptr + data_layout.num_entries[storage::DataLayout::MLD_CELL_STORAGE]);
+                mld_cell_storage_ptr +
+                    data_layout.num_entries[storage::DataLayout::MLD_CELL_STORAGE]);
         }
     }
 
@@ -1038,7 +1040,10 @@ class ContiguousInternalMemoryDataFacade : public BaseDataFacade
         return mld_partition;
     }
 
-    const util::CellStorage<true> &GetCellStorage() const override final { return mld_cell_storage; }
+    const util::CellStorage<true> &GetCellStorage() const override final
+    {
+        return mld_cell_storage;
+    }
 };
 }
 }

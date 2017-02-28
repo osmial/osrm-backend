@@ -78,6 +78,8 @@ template <typename DataT> class SharedMemoryWrapper
         m_size = size;
     }
 
+    auto data() const { return m_ptr; }
+
     DataT &at(const std::size_t index) { return m_ptr[index]; }
 
     const DataT &at(const std::size_t index) const { return m_ptr[index]; }

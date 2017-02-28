@@ -42,6 +42,15 @@ class MultiLayerDijkstraRouting final : public BasicRoutingInterface
     void operator()(const std::shared_ptr<const datafacade::BaseDataFacade> facade,
                     const std::vector<PhantomNodes> &phantom_nodes_vector,
                     InternalRouteResult &raw_route_data) const;
+
+    void RoutingStep(const std::shared_ptr<const datafacade::BaseDataFacade> facade,
+                     SearchEngineData::MultiLayerDijkstraHeap &forward_heap,
+                     SearchEngineData::MultiLayerDijkstraHeap &reverse_heap,
+                     util::LevelID highest_level,
+                     NodeID &middle_node_id,
+                     EdgeWeight &upper_bound,
+                     EdgeWeight min_edge_offset,
+                     const bool forward_direction) const;
 };
 
 } // namespace routing_algorithms

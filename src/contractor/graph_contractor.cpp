@@ -170,6 +170,7 @@ void GraphContractor::FlushDataAndRebuildContractorGraph(
 
 void GraphContractor::Run(double core_factor)
 {
+    core_factor = 0; // TODO
     // for the preperation we can use a big grain size, which is much faster (probably cache)
     const constexpr size_t InitGrainSize = 100000;
     const constexpr size_t PQGrainSize = 100000;

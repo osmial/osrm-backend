@@ -107,7 +107,7 @@ class CellCustomizer
             for (auto subcell_weight : subcell.GetOutWeight(node))
             {
                 BOOST_ASSERT(subcell_destination != subcell.GetDestinationNodes().end());
-                if (subcell_weight != INVALID_EDGE_WEIGHT)
+                if (subcell_weight != INVALID_EDGE_WEIGHT) // TODO check node == destination
                 {
                     const NodeID to = *subcell_destination;
                     const EdgeWeight to_weight = subcell_weight + weight;

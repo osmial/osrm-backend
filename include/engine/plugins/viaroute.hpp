@@ -7,8 +7,8 @@
 
 #include "engine/routing_algorithms/alternative_path.hpp"
 #include "engine/routing_algorithms/direct_shortest_path.hpp"
-#include "engine/routing_algorithms/shortest_path.hpp"
 #include "engine/routing_algorithms/mld_shortest_path.hpp"
+#include "engine/routing_algorithms/shortest_path.hpp"
 #include "engine/search_engine_data.hpp"
 #include "util/json_container.hpp"
 

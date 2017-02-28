@@ -10,17 +10,17 @@
 #include "extractor/guidance/turn_lane_types.hpp"
 #include "extractor/original_edge_data.hpp"
 #include "engine/phantom_node.hpp"
+#include "util/cell_storage.hpp"
 #include "util/exception.hpp"
 #include "util/guidance/bearing_class.hpp"
 #include "util/guidance/entry_class.hpp"
 #include "util/guidance/turn_bearing.hpp"
 #include "util/guidance/turn_lanes.hpp"
 #include "util/integer_range.hpp"
+#include "util/multi_level_partition.hpp"
 #include "util/string_util.hpp"
 #include "util/string_view.hpp"
 #include "util/typedefs.hpp"
-#include "util/cell_storage.hpp"
-#include "util/multi_level_partition.hpp"
 
 #include "osrm/coordinate.hpp"
 
@@ -208,7 +208,6 @@ class BaseDataFacade
     virtual const util::PackedMultiLevelPartition<true> &GetMultiLevelPartition() const = 0;
 
     virtual const util::CellStorage<true> &GetCellStorage() const = 0;
-
 };
 }
 }
