@@ -24,6 +24,7 @@ option(ENABLE_SANITIZER "Use memory sanitizer for Debug build" OFF)
 option(ENABLE_LTO "Use LTO if available" OFF)
 option(ENABLE_FUZZING "Fuzz testing using LLVM's libFuzzer" OFF)
 option(ENABLE_GOLD_LINKER "Use GNU gold linker if available" ON)
+option(ENABLE_NODE_BINDINGS "Build NodeJs bindings" OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -732,6 +733,11 @@ add_custom_target(uninstall
 # Modular build system: each directory registered here provides its own CMakeLists.txt
 add_subdirectory(unit_tests)
 add_subdirectory(src/benchmarks)
+
+if (ENABLE_NODE_BINDINGS)
+  add_subdirectory(src/bindings/node)
+endif()
+
 
 if (ENABLE_FUZZING)
   # Requires libosrm being built with sanitizers; make configurable and default to ubsan
