@@ -59,7 +59,7 @@ void CellStorageStatistics(const Graph &graph,
 void PartionerOutputCustomizationData(const CustomizationConfig &config)
 {
     auto mapping = partition::LoadNodeBasedGraphToEdgeBasedGraphMapping(config.base_path.string() +
-                                                                        ".nbg_to_ebg");
+                                                                        ".cnbg_to_ebg");
     util::Log() << "Loaded node based graph to edge based graph mapping";
 
     auto edge_based_graph = partition::LoadEdgeBasedGraph(config.edge_based_graph_path.string());

@@ -250,6 +250,7 @@ void BasicRoutingInterface::Search(const std::shared_ptr<const datafacade::BaseD
         return;
     }
 
+    if (false)
     {
         std::cout << "Original routing\n";
         {

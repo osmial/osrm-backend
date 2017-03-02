@@ -84,7 +84,11 @@ Status ViaRoutePlugin::HandleRequest(const std::shared_ptr<const datafacade::Bas
     };
     util::for_each_pair(snapped_phantoms, build_phantom_pairs);
 
-    if (1 == raw_route.segment_end_coordinates.size())
+    if (route_parameters.use_mld)
+    {
+        mld_shortest_path(facade, raw_route.segment_end_coordinates, raw_route);
+    }
+    else if (1 == raw_route.segment_end_coordinates.size())
     {
         if (route_parameters.alternatives && facade->GetCoreSize() == 0)
         {
@@ -92,8 +96,7 @@ Status ViaRoutePlugin::HandleRequest(const std::shared_ptr<const datafacade::Bas
         }
         else
         {
-            mld_shortest_path(facade, raw_route.segment_end_coordinates, raw_route);
-            // direct_shortest_path(facade, raw_route.segment_end_coordinates, raw_route);
+            direct_shortest_path(facade, raw_route.segment_end_coordinates, raw_route);
         }
     }
     else

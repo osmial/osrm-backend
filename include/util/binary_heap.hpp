@@ -283,6 +283,7 @@ class BinaryHeap
 
     void CheckHeap()
     {
+        return;
 #ifndef NDEBUG
         for (std::size_t i = 2; i < heap.size(); ++i)
         {

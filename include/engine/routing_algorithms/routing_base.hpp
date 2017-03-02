@@ -108,28 +108,57 @@ class BasicRoutingInterface
     {
         BOOST_ASSERT(std::distance(packed_path_begin, packed_path_end) > 0);
 
-        const bool start_traversed_in_reverse =
-            (*packed_path_begin != phantom_node_pair.source_phantom.forward_segment_id.id);
-        const bool target_traversed_in_reverse =
-            (*std::prev(packed_path_end) != phantom_node_pair.target_phantom.forward_segment_id.id);
-
-        BOOST_ASSERT(*packed_path_begin == phantom_node_pair.source_phantom.forward_segment_id.id ||
-                     *packed_path_begin == phantom_node_pair.source_phantom.reverse_segment_id.id);
-        BOOST_ASSERT(
-            *std::prev(packed_path_end) == phantom_node_pair.target_phantom.forward_segment_id.id ||
-            *std::prev(packed_path_end) == phantom_node_pair.target_phantom.reverse_segment_id.id);
-
+        std::vector<NodeID> unpacked_nodes;
         UnpackCHPath(
             *facade,
             packed_path_begin,
             packed_path_end,
+            [&unpacked_nodes](std::pair<NodeID, NodeID> &edge, const EdgeData & /*edge_data*/) {
+                if (unpacked_nodes.empty())
+                    unpacked_nodes.push_back(edge.first);
+                unpacked_nodes.push_back(edge.second);
+            });
+
+        if (unpacked_nodes.empty())
+        {
+            unpacked_nodes.push_back(*packed_path_begin);
+        }
+
+        std::cout << unpacked_nodes.size() << "\n";
+        UnpackPath(facade, unpacked_nodes, phantom_node_pair, unpacked_path);
+    }
+
+    void UnpackPath(const std::shared_ptr<const datafacade::BaseDataFacade> facade,
+                    const std::vector<NodeID> &unpacked_nodes,
+                    const PhantomNodes &phantom_node_pair,
+                    std::vector<PathData> &unpacked_path) const
+    {
+        BOOST_ASSERT(unpacked_nodes.size() > 0);
+
+        const bool start_traversed_in_reverse =
+            (unpacked_nodes.front() != phantom_node_pair.source_phantom.forward_segment_id.id);
+        const bool target_traversed_in_reverse =
+            (unpacked_nodes.back() != phantom_node_pair.target_phantom.forward_segment_id.id);
+
+        BOOST_ASSERT(
+            unpacked_nodes.front() == phantom_node_pair.source_phantom.forward_segment_id.id ||
+            unpacked_nodes.front() == phantom_node_pair.source_phantom.reverse_segment_id.id);
+        BOOST_ASSERT(
+            unpacked_nodes.back() == phantom_node_pair.target_phantom.forward_segment_id.id ||
+            unpacked_nodes.back() == phantom_node_pair.target_phantom.reverse_segment_id.id);
+
+        util::for_each_pair(
+            unpacked_nodes,
             [this,
              &facade,
              &unpacked_path,
              &phantom_node_pair,
              &start_traversed_in_reverse,
-             &target_traversed_in_reverse](std::pair<NodeID, NodeID> & /* edge */,
-                                           const EdgeData &edge_data) {
+             &target_traversed_in_reverse](
+                const NodeID source, const NodeID target) { // TODO: refactor to edge ID values
+
+                const auto edge_id = facade->FindEdge(source, target);
+                const auto &edge_data = facade->GetEdgeData(edge_id);
 
                 BOOST_ASSERT_MSG(!edge_data.shortcut, "original edge flagged as shortcut");
                 const auto name_index = facade->GetNameIndexFromEdgeID(edge_data.id);
@@ -176,7 +205,6 @@ class BasicRoutingInterface
                          : 0);
                 const std::size_t end_index = weight_vector.size();
 
-                BOOST_ASSERT(start_index >= 0);
                 BOOST_ASSERT(start_index < end_index);
                 for (std::size_t segment_idx = start_index; segment_idx < end_index; ++segment_idx)
                 {

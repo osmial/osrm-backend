@@ -68,6 +68,8 @@ struct RouteParametersGrammar : public BaseParametersGrammar<Iterator, Signature
             BaseGrammar::base_rule(qi::_r1) |
             (qi::lit("steps=") >
              qi::bool_[ph::bind(&engine::api::RouteParameters::steps, qi::_r1) = qi::_1]) |
+            (qi::lit("mld=") >
+             qi::bool_[ph::bind(&engine::api::RouteParameters::use_mld, qi::_r1) = qi::_1]) |
             (qi::lit("geometries=") >
              geometries_type[ph::bind(&engine::api::RouteParameters::geometries, qi::_r1) =
                                  qi::_1]) |

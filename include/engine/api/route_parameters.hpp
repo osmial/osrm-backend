@@ -135,6 +135,8 @@ struct RouteParameters : public BaseParameters
     OverviewType overview = OverviewType::Simplified;
     boost::optional<bool> continue_straight;
 
+    bool use_mld = false; // TODO: use for testing only
+
     bool IsValid() const { return coordinates.size() >= 2 && BaseParameters::IsValid(); }
 };
 

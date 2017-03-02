@@ -1,4 +1,7 @@
 #include "engine/routing_algorithms/mld_shortest_path.hpp"
+#include "util/for_each_pair.hpp"
+
+#include <valgrind/callgrind.h>
 
 namespace osrm
 {
@@ -7,11 +10,14 @@ namespace engine
 namespace routing_algorithms
 {
 
+// TODO: remove output
+// TODO: reduce code duplication
 void MultiLayerDijkstraRouting::RoutingStep(
     const std::shared_ptr<const datafacade::BaseDataFacade> facade,
     SearchEngineData::MultiLayerDijkstraHeap &forward_heap,
     SearchEngineData::MultiLayerDijkstraHeap &reverse_heap,
     util::LevelID highest_level,
+    util::CellID highest_level_parent_cell,
     NodeID &middle_node_id,
     EdgeWeight &upper_bound,
     EdgeWeight min_edge_offset,
@@ -20,14 +26,32 @@ void MultiLayerDijkstraRouting::RoutingStep(
     const auto &partition = facade->GetMultiLevelPartition();
     const auto &cells = facade->GetCellStorage();
 
-    const NodeID node = forward_heap.DeleteMin();
-    const EdgeWeight weight = forward_heap.GetKey(node);
-    const auto level = forward_heap.GetData(node).level;
+    // TODO: highly inefficient and takes 20-40% percent of time
+    auto get_highest_level = [&](const NodeID node) {
+        // Get highest possible hierarchy level:
+        // if forward_direction is true
+        //   node is a source on the returned level and an internal node on the next level
+        // if forward_direction is true
+        //   node is a destination on the returned level and an internal node on the next level
+        util::LevelID level = 0;
+        if (forward_direction)
+        {
+            while (level < highest_level &&
+                   cells.GetCell(level + 1, partition.GetCell(level + 1, node)).IsSourceNode(node))
+                ++level;
+        }
+        else
+        {
+            while (level < highest_level &&
+                   cells.GetCell(level + 1, partition.GetCell(level + 1, node))
+                       .IsDestinationNode(node))
+                ++level;
+        }
+        return level;
+    };
 
-    // const auto cell_id = partition.GetCell(level, node);
-    std::cout << "RoutingStep " << (forward_direction ? "forward" : "backward") << " for level "
-              << (int)level << " " << (level > 0 ? partition.GetCell(level, node) : 0)
-              << ", node = " << node << " weight = " << weight << "\n";
+    const auto node = forward_heap.DeleteMin();
+    const auto weight = forward_heap.GetKey(node);
 
     if (reverse_heap.WasInserted(node))
     {
@@ -50,169 +74,244 @@ void MultiLayerDijkstraRouting::RoutingStep(
         return;
     }
 
-    if (level == 0)
+    // Boundary edges
+    for (const auto edge : facade->GetAdjacentEdgeRange(node))
     {
-        const auto upper_cell_id = partition.GetCell(level + 1, node);
-        for (const auto edge : facade->GetAdjacentEdgeRange(node))
+        const EdgeData &data = facade->GetEdgeData(edge);
+        bool forward_directionFlag = (forward_direction ? data.forward : data.backward);
+        if (forward_directionFlag)
         {
-            const EdgeData &data = facade->GetEdgeData(edge);
-            bool forward_directionFlag = (forward_direction ? data.forward : data.backward);
-            if (forward_directionFlag)
+            const NodeID to = facade->GetTarget(edge);
+
+            // Condition for a boundary edge node -> to on the current level
+            // and condition to be in the same highest_level_parent cell on highest_level + 1 level
+            const auto from_level = forward_heap.GetData(node).edge_level;
+            // Get highest possible hierarchy level
+            // const auto to_level = get_highest_level(to);
+
+            if ( // Routing is unrestricted or restricted to the highest level cell
+                (highest_level_parent_cell == util::INVALID_CELL_ID ||
+                 highest_level_parent_cell == partition.GetCell(highest_level + 1, to)) &&
+                // "Route-inside-parent-cell" condition
+                (partition.GetCell(from_level + 1, node) == partition.GetCell(from_level + 1, to)
+                 // "Always-go-up-at-boundary" condition
+                 ||
+                 get_highest_level(to) > from_level))
             {
-                const NodeID to = facade->GetTarget(edge);
-                const EdgeWeight edge_weight = data.weight;
-                const auto next_level = upper_cell_id == partition.GetCell(level + 1, to)
-                                            ? util::LevelID{0}
-                                            : util::LevelID{1};
-
-                std::cout << "    -> " << to << " weight " << edge_weight << "\n";
-
-                BOOST_ASSERT_MSG(edge_weight > 0, "edge_weight invalid");
-                const EdgeWeight to_weight = weight + edge_weight;
+                BOOST_ASSERT_MSG(data.weight > 0, "edge_weight invalid");
+                const EdgeWeight to_weight = weight + data.weight;
 
                 // New Node discovered -> Add to Heap + Node Info Storage
                 if (!forward_heap.WasInserted(to))
                 {
-                    forward_heap.Insert(to, to_weight, {node, next_level});
-                    std::cout << "        insert " << to << " key " << to_weight << " {" << node
-                              << " " << (int)next_level << "}"
-                              << "\n";
+                    forward_heap.Insert(to, to_weight, {node, 0});
                 }
                 // Found a shorter Path -> Update weight
                 else if (to_weight < forward_heap.GetKey(to))
                 {
                     // new parent
                     forward_heap.GetData(to).parent = node;
-                    forward_heap.GetData(to).level = next_level;
+                    forward_heap.GetData(to).edge_level = 0; // the base graph edge has level 0
                     forward_heap.DecreaseKey(to, to_weight);
-                    std::cout << "        decrease key " << to << " key " << to_weight << " {"
-                              << node << " " << (int)next_level << "}"
-                              << "\n";
                 }
             }
         }
     }
-    else
+
+    // Overlay edges
+    if (forward_heap.GetData(node).edge_level == 0)
     {
-        const auto cell_id = partition.GetCell(level, node);
-        auto cell = cells.GetCell(level, cell_id);
-
-        if (forward_direction)
+        const auto level = get_highest_level(node);
+        if (level >= 1)
         {
-            // Shortcuts in forward direction
-            auto destination = cell.GetDestinationNodes().begin();
-            for (auto shortcut_weight : cell.GetOutWeight(node))
+            if (forward_direction)
             {
-                BOOST_ASSERT(destination != cell.GetDestinationNodes().end());
-                const NodeID to = *destination;
-                std::cout << "    -> " << to << " forward shortcut_weight " << shortcut_weight
-                          << "\n";
-                if (shortcut_weight != INVALID_EDGE_WEIGHT && node != to)
+                // Shortcuts in forward direction
+                const auto &cell = cells.GetCell(level, partition.GetCell(level, node));
+                auto destination = cell.GetDestinationNodes().begin();
+                for (auto shortcut_weight : cell.GetOutWeight(node))
                 {
-                    const EdgeWeight to_weight = shortcut_weight + weight;
-                    if (!forward_heap.WasInserted(to))
+                    BOOST_ASSERT(destination != cell.GetDestinationNodes().end());
+                    const NodeID to = *destination;
+                    if (shortcut_weight != INVALID_EDGE_WEIGHT && node != to)
                     {
-                        forward_heap.Insert(to, to_weight, {node, level});
-                        std::cout << "        insert " << to << " key " << to_weight << " {" << node
-                                  << " " << (int)level << "}"
-                                  << "\n";
+                        const EdgeWeight to_weight = weight + shortcut_weight;
+                        if (!forward_heap.WasInserted(to))
+                        {
+                            forward_heap.Insert(to, to_weight, {node, level});
+                        }
+                        else if (to_weight < forward_heap.GetKey(to))
+                        {
+                            // new parent
+                            forward_heap.GetData(to).parent = node;
+                            forward_heap.GetData(to).edge_level = level;
+                            forward_heap.DecreaseKey(to, to_weight);
+                        }
                     }
-                    else if (to_weight < forward_heap.GetKey(to))
-                    {
-                        // new parent
-                        forward_heap.GetData(to).parent = node;
-                        forward_heap.GetData(to).level = level;
-                        forward_heap.DecreaseKey(to, to_weight);
-                        std::cout << "        decrease key " << to << " key " << to_weight << " {"
-                                  << node << " " << (int)level << "}"
-                                  << "\n";
-                    }
+                    ++destination;
                 }
-                ++destination;
             }
-        }
-        else
-        {
-            // Shortcuts in backward direction
-            auto source = cell.GetSourceNodes().begin();
-            for (auto shortcut_weight : cell.GetInWeight(node))
+            else
             {
-                BOOST_ASSERT(source != cell.GetSourceNodes().end());
-                const NodeID to = *source;
-                std::cout << "    -> " << to << " backward shortcut_weight " << shortcut_weight
-                          << "\n";
-                if (shortcut_weight != INVALID_EDGE_WEIGHT && node != to)
+                // Shortcuts in backward direction
+                const auto &cell = cells.GetCell(level, partition.GetCell(level, node));
+                auto source = cell.GetSourceNodes().begin();
+                for (auto shortcut_weight : cell.GetInWeight(node))
                 {
-                    const EdgeWeight to_weight = shortcut_weight + weight;
-                    if (!forward_heap.WasInserted(to))
+                    BOOST_ASSERT(source != cell.GetSourceNodes().end());
+                    const NodeID to = *source;
+                    if (shortcut_weight != INVALID_EDGE_WEIGHT && node != to)
                     {
-                        forward_heap.Insert(to, to_weight, {node, level});
-                        std::cout << "        insert " << to << " key " << to_weight << " {" << node
-                                  << " " << (int)level << "}"
-                                  << "\n";
+                        const EdgeWeight to_weight = weight + shortcut_weight;
+                        if (!forward_heap.WasInserted(to))
+                        {
+                            forward_heap.Insert(to, to_weight, {node, level});
+                        }
+                        else if (to_weight < forward_heap.GetKey(to))
+                        {
+                            // new parent
+                            forward_heap.GetData(to).parent = node;
+                            forward_heap.GetData(to).edge_level = level;
+                            forward_heap.DecreaseKey(to, to_weight);
+                        }
                     }
-                    else if (to_weight < forward_heap.GetKey(to))
-                    {
-                        // new parent
-                        forward_heap.GetData(to).parent = node;
-                        forward_heap.GetData(to).level = level;
-                        forward_heap.DecreaseKey(to, to_weight);
-                        std::cout << "        decrease key " << to << " key " << to_weight << " {"
-                                  << node << " " << (int)level << "}"
-                                  << "\n";
-                    }
-                }
-                ++source;
-            }
-        }
-
-        // Boundary edges
-        // TODO merge with level 0
-        for (const auto edge : facade->GetAdjacentEdgeRange(node))
-        {
-            const EdgeData &data = facade->GetEdgeData(edge);
-            bool forward_directionFlag = (forward_direction ? data.forward : data.backward);
-            if (forward_directionFlag)
-            {
-                const NodeID to = facade->GetTarget(edge);
-                const EdgeWeight edge_weight = data.weight;
-                std::cout << "    -> " << to << " border edge weight " << data.weight
-                          << " to cell id " << partition.GetCell(level, to) << "\n";
-
-                if (cell_id != partition.GetCell(level, to))
-                {
-                    BOOST_ASSERT_MSG(edge_weight > 0, "edge_weight invalid");
-                    const EdgeWeight to_weight = weight + edge_weight;
-
-                    // TODO: compute only if needed (optimization only)
-                    // TODO: check if `to` is source for data.forward or destination for
-                    // data.backward  (optimization only)
-                    util::LevelID next_level =
-                        std::min(highest_level, partition.GetHighestDifferentLevel(node, to));
-
-                    // New Node discovered -> Add to Heap + Node Info Storage
-                    if (!forward_heap.WasInserted(to))
-                    {
-                        forward_heap.Insert(to, to_weight, {node, next_level});
-                        std::cout << "        insert " << to << " key " << to_weight << " {" << node
-                                  << " " << (int)next_level << "}"
-                                  << "\n";
-                    }
-                    // Found a shorter Path -> Update weight
-                    else if (to_weight < forward_heap.GetKey(to))
-                    {
-                        // new parent
-                        forward_heap.GetData(to).parent = node;
-                        forward_heap.GetData(to).level = next_level;
-                        forward_heap.DecreaseKey(to, to_weight);
-                        std::cout << "        decrease key " << to << " key " << to_weight << " {"
-                                  << node << " " << (int)next_level << "}"
-                                  << "\n";
-                    }
+                    ++source;
                 }
             }
         }
     }
+}
+
+std::vector<NodeID> MultiLayerDijkstraRouting::UnpackSubPath(
+    const std::shared_ptr<const datafacade::BaseDataFacade> facade,
+    SearchEngineData::MultiLayerDijkstraHeap &forward_heap,
+    SearchEngineData::MultiLayerDijkstraHeap &reverse_heap,
+    util::LevelID highest_level,
+    util::CellID highest_level_parent_cell,
+    EdgeWeight &mld_weight,
+    const std::string &padding) const
+{
+    const auto &partition = facade->GetMultiLevelPartition();
+
+    // This part is completely broken and must be redesigned
+    // -> UnpackSubPath must be a pure function without external state
+    // of forward_heap and reverse_heap that also contain source and target points
+    // At the moment it is used only for customization manual tests
+
+    // run two-Target Dijkstra routing step.
+    NodeID middle = SPECIAL_NODEID;
+    EdgeWeight weight = INVALID_EDGE_WEIGHT;
+
+    TIMER_START(mld_routing);
+    while (0 < (forward_heap.Size() + reverse_heap.Size()))
+    {
+        if (!forward_heap.Empty())
+        {
+            RoutingStep(facade,
+                        forward_heap,
+                        reverse_heap,
+                        highest_level,
+                        highest_level_parent_cell,
+                        middle,
+                        weight,
+                        0,
+                        true);
+        }
+        if (!reverse_heap.Empty())
+        {
+            RoutingStep(facade,
+                        reverse_heap,
+                        forward_heap,
+                        highest_level,
+                        highest_level_parent_cell,
+                        middle,
+                        weight,
+                        0,
+                        false);
+        }
+    }
+    TIMER_STOP(mld_routing);
+    util::Log() << padding << "MLD routing took " << TIMER_SEC(mld_routing) << " seconds";
+
+    // No path found for both target nodes?
+    if (weight == INVALID_EDGE_WEIGHT || SPECIAL_NODEID == middle)
+    {
+        weight = INVALID_EDGE_WEIGHT;
+        return std::vector<NodeID>();
+    }
+
+    // save upward weight
+    if (mld_weight == INVALID_EDGE_WEIGHT)
+        mld_weight = weight;
+
+    if (forward_heap.GetData(middle).parent == middle &&
+        reverse_heap.GetData(middle).parent == middle)
+    { // Single-edge path
+        return std::vector<NodeID>(1, middle);
+    }
+
+    // Get packed path
+    std::vector<std::pair<util::LevelID, NodeID>> packed_path;
+    NodeID current_node = middle, parent_node = forward_heap.GetData(middle).parent;
+    while (parent_node != current_node)
+    {
+        packed_path.push_back({forward_heap.GetData(current_node).edge_level, current_node});
+        current_node = parent_node;
+        parent_node = forward_heap.GetData(parent_node).parent;
+    }
+    packed_path.push_back({forward_heap.GetData(current_node).edge_level, current_node});
+    std::reverse(std::begin(packed_path), std::end(packed_path));
+
+    current_node = middle, parent_node = reverse_heap.GetData(middle).parent;
+    while (parent_node != current_node)
+    {
+        packed_path.push_back({reverse_heap.GetData(current_node).edge_level, parent_node});
+        current_node = parent_node;
+        parent_node = reverse_heap.GetData(parent_node).parent;
+    }
+
+    std::vector<NodeID> unpacked_path;
+
+    TIMER_START(mld_path_unpacking);
+    util::for_each_pair(
+        packed_path,
+        [this, &facade, &forward_heap, &reverse_heap, &partition, &unpacked_path, &padding](
+            const auto &source, const auto &target) {
+            if (unpacked_path.empty())
+                unpacked_path.push_back(source.second);
+
+            if (target.first == 0)
+            { // a base graph edge (level 0 edge or boundary edge)
+                unpacked_path.push_back(target.second);
+            }
+            else
+            { // an overlay graph edge
+                auto parent_cell_id = partition.GetCell(target.first, target.second);
+                auto sublevel = target.first - 1;
+
+                // Here heaps can be reused, let's go deeper!
+                forward_heap.Clear();
+                reverse_heap.Clear();
+                forward_heap.Insert(source.second, 0, {source.second, 0});
+                reverse_heap.Insert(target.second, 0, {target.second, 0});
+
+                EdgeWeight weight = INVALID_EDGE_WEIGHT;
+                const auto &subpath = this->UnpackSubPath(facade,
+                                                          forward_heap,
+                                                          reverse_heap,
+                                                          sublevel,
+                                                          parent_cell_id,
+                                                          weight,
+                                                          padding + "  ");
+                BOOST_ASSERT(subpath.size() > 1);
+                unpacked_path.insert(unpacked_path.end(), subpath.begin() + 1, subpath.end());
+            }
+        });
+    TIMER_STOP(mld_path_unpacking);
+    util::Log() << padding << "MLD path unpacking took " << TIMER_SEC(mld_path_unpacking)
+                << " seconds";
+
+    return std::move(unpacked_path);
 }
 
 /// This is a striped down version of the general shortest path algorithm.
@@ -245,63 +344,12 @@ operator()(const std::shared_ptr<const datafacade::BaseDataFacade> facade,
     BOOST_ASSERT(target_phantom.IsValid());
 
     const auto &partition = facade->GetMultiLevelPartition();
-    const auto &cells = facade->GetCellStorage();
-
-    std::cout << "forward heap\n";
-    if (source_phantom.forward_segment_id.enabled)
-    {
-        forward_heap.Insert(source_phantom.forward_segment_id.id,
-                            -source_phantom.GetForwardWeightPlusOffset(),
-                            {source_phantom.forward_segment_id.id, 0});
-        std::cout << "  forward_segment " << source_phantom.forward_segment_id.id << " "
-                  << " level 1 cell id "
-                  << partition.GetCell(1, source_phantom.forward_segment_id.id) << "\n";
-    }
-    if (source_phantom.reverse_segment_id.enabled)
-    {
-        forward_heap.Insert(source_phantom.reverse_segment_id.id,
-                            -source_phantom.GetReverseWeightPlusOffset(),
-                            {source_phantom.reverse_segment_id.id, 0});
-        std::cout << "  reverse_segment " << source_phantom.reverse_segment_id.id << " "
-                  << " level 1 cell id "
-                  << partition.GetCell(1, source_phantom.reverse_segment_id.id) << "\n";
-    }
-
-    std::cout << "reverse heap\n";
-    if (target_phantom.forward_segment_id.enabled)
-    {
-        reverse_heap.Insert(target_phantom.forward_segment_id.id,
-                            target_phantom.GetForwardWeightPlusOffset(),
-                            {target_phantom.forward_segment_id.id, 0});
-        std::cout << "  forward_segment " << target_phantom.forward_segment_id.id << " "
-                  << " level 1 cell id "
-                  << partition.GetCell(1, target_phantom.forward_segment_id.id) << "\n";
-    }
-
-    if (target_phantom.reverse_segment_id.enabled)
-    {
-        reverse_heap.Insert(target_phantom.reverse_segment_id.id,
-                            target_phantom.GetReverseWeightPlusOffset(),
-                            {target_phantom.reverse_segment_id.id, 0});
-        std::cout << "  reverse_segment " << target_phantom.reverse_segment_id.id << " "
-                  << " level 1 cell id "
-                  << partition.GetCell(1, target_phantom.reverse_segment_id.id) << "\n";
-    }
-
-    int weight = INVALID_EDGE_WEIGHT;
-    std::vector<NodeID> packed_leg;
-
-    const bool constexpr DO_NOT_FORCE_LOOPS =
-        false; // prevents forcing of loops, since offsets are set correctly
 
     auto get_highest_level = [&partition](const SegmentID &source, const SegmentID &target) {
         if (source.enabled && target.enabled)
             return partition.GetHighestDifferentLevel(source.id, target.id);
         return std::numeric_limits<util::LevelID>::max();
     };
-
-    // TODO: remove check
-    EdgeWeight mld_weight = INVALID_EDGE_WEIGHT;
 
     const auto highest_level =
         std::min(std::min(get_highest_level(source_phantom.forward_segment_id,
@@ -313,178 +361,59 @@ operator()(const std::shared_ptr<const datafacade::BaseDataFacade> facade,
                           get_highest_level(source_phantom.reverse_segment_id,
                                             target_phantom.reverse_segment_id)));
 
+    if (source_phantom.forward_segment_id.enabled)
     {
-        std::cout << "MLD with #levels "
-                  << " " << (int)facade->GetMultiLevelPartition().GetNumberOfLevels() << " "
-                  << " highest_level " << highest_level << "\n";
-
-        NodeID middle = SPECIAL_NODEID;
-        weight = INVALID_EDGE_WEIGHT;
-
-        // get offset to account for offsets on phantom nodes on compressed edges
-        const auto min_edge_offset = std::min(0, forward_heap.MinKey());
-        BOOST_ASSERT(min_edge_offset <= 0);
-        // we only every insert negative offsets for nodes in the forward heap
-        BOOST_ASSERT(reverse_heap.MinKey() >= 0);
-
-        // run two-Target Dijkstra routing step.
-        while (0 < (forward_heap.Size() + reverse_heap.Size()))
-        {
-            if (!forward_heap.Empty())
-            {
-                RoutingStep(facade,
-                            forward_heap,
-                            reverse_heap,
-                            highest_level,
-                            middle,
-                            weight,
-                            min_edge_offset,
-                            true);
-            }
-            if (!reverse_heap.Empty())
-            {
-                RoutingStep(facade,
-                            reverse_heap,
-                            forward_heap,
-                            highest_level,
-                            middle,
-                            weight,
-                            min_edge_offset,
-                            false);
-            }
-        }
-
-        // No path found for both target nodes?
-        if (weight == INVALID_EDGE_WEIGHT || SPECIAL_NODEID == middle)
-        {
-            weight = INVALID_EDGE_WEIGHT;
-            // return; TODO remove check
-        }
-
-        mld_weight = weight;
-
-        std::cout << "MLD weight " << mld_weight << " node " << middle << "\n";
-        std::cerr << "MLD weight " << mld_weight << " node " << middle << "\n";
-
-        {
-            std::cout << "forward heap\n";
-            NodeID node = middle;
-            while (forward_heap.GetData(node).parent != node)
-            {
-                std::cout << "level " << (int)forward_heap.GetData(node).level << " node " << node
-                          << " weight " << forward_heap.GetKey(node) << "\n";
-                node = forward_heap.GetData(node).parent;
-            }
-            std::cout << "level " << (int)forward_heap.GetData(node).level << " node " << node
-                      << " weight " << forward_heap.GetKey(node) << "\n";
-        }
-        {
-            std::cout << "reverse heap\n";
-            NodeID node = middle;
-            while (reverse_heap.GetData(node).parent != node)
-            {
-                std::cout << "level " << (int)reverse_heap.GetData(node).level << " node " << node
-                          << " weight " << reverse_heap.GetKey(node) << "\n";
-                node = reverse_heap.GetData(node).parent;
-            }
-            std::cout << "level " << (int)reverse_heap.GetData(node).level << " node " << node
-                      << " weight " << reverse_heap.GetKey(node) << "\n";
-        }
+        forward_heap.Insert(source_phantom.forward_segment_id.id,
+                            -source_phantom.GetForwardWeightPlusOffset(),
+                            {source_phantom.forward_segment_id.id, 0});
+    }
+    if (source_phantom.reverse_segment_id.enabled)
+    {
+        forward_heap.Insert(source_phantom.reverse_segment_id.id,
+                            -source_phantom.GetReverseWeightPlusOffset(),
+                            {source_phantom.reverse_segment_id.id, 0});
     }
 
-    // if (facade->GetCoreSize() > 0)
-    // {
-    //     engine_working_data.InitializeOrClearSecondThreadLocalStorage(facade->GetNumberOfNodes());
-    //     QueryHeap &forward_core_heap = *(engine_working_data.forward_heap_2);
-    //     QueryHeap &reverse_core_heap = *(engine_working_data.reverse_heap_2);
-    //     forward_core_heap.Clear();
-    //     reverse_core_heap.Clear();
-
-    //     super::SearchWithCore(facade,
-    //                           forward_heap,
-    //                           reverse_heap,
-    //                           forward_core_heap,
-    //                           reverse_core_heap,
-    //                           weight,
-    //                           packed_leg,
-    //                           DO_NOT_FORCE_LOOPS,
-    //                           DO_NOT_FORCE_LOOPS);
-    // }
-    // else
+    if (target_phantom.forward_segment_id.enabled)
     {
-        engine_working_data.InitializeOrClearFirstThreadLocalStorage(facade->GetNumberOfNodes());
-        QueryHeap &forward_heap = *(engine_working_data.forward_heap_1);
-        QueryHeap &reverse_heap = *(engine_working_data.reverse_heap_1);
-
-        forward_heap.Clear();
-        reverse_heap.Clear();
-
-        BOOST_ASSERT(source_phantom.IsValid());
-        BOOST_ASSERT(target_phantom.IsValid());
-
-        if (source_phantom.forward_segment_id.enabled)
-        {
-            forward_heap.Insert(source_phantom.forward_segment_id.id,
-                                -source_phantom.GetForwardWeightPlusOffset(),
-                                source_phantom.forward_segment_id.id);
-        }
-        if (source_phantom.reverse_segment_id.enabled)
-        {
-            forward_heap.Insert(source_phantom.reverse_segment_id.id,
-                                -source_phantom.GetReverseWeightPlusOffset(),
-                                source_phantom.reverse_segment_id.id);
-        }
-
-        if (target_phantom.forward_segment_id.enabled)
-        {
-            reverse_heap.Insert(target_phantom.forward_segment_id.id,
-                                target_phantom.GetForwardWeightPlusOffset(),
-                                target_phantom.forward_segment_id.id);
-        }
-
-        if (target_phantom.reverse_segment_id.enabled)
-        {
-            reverse_heap.Insert(target_phantom.reverse_segment_id.id,
-                                target_phantom.GetReverseWeightPlusOffset(),
-                                target_phantom.reverse_segment_id.id);
-        }
-
-        int weight = INVALID_EDGE_WEIGHT;
-        std::vector<NodeID> packed_leg;
-
-        super::Search(facade,
-                      forward_heap,
-                      reverse_heap,
-                      weight,
-                      packed_leg,
-                      DO_NOT_FORCE_LOOPS,
-                      DO_NOT_FORCE_LOOPS);
-
-        BOOST_ASSERT(weight == mld_weight);
-
-        // No path found for both target nodes?
-        if (INVALID_EDGE_WEIGHT == weight)
-        {
-            raw_route_data.shortest_path_length = INVALID_EDGE_WEIGHT;
-            raw_route_data.alternative_path_length = INVALID_EDGE_WEIGHT;
-            return;
-        }
-
-        BOOST_ASSERT_MSG(!packed_leg.empty(), "packed path empty");
-
-        raw_route_data.shortest_path_length = weight;
-        raw_route_data.unpacked_path_segments.resize(1);
-        raw_route_data.source_traversed_in_reverse.push_back(
-            (packed_leg.front() != phantom_node_pair.source_phantom.forward_segment_id.id));
-        raw_route_data.target_traversed_in_reverse.push_back(
-            (packed_leg.back() != phantom_node_pair.target_phantom.forward_segment_id.id));
-
-        super::UnpackPath(facade,
-                          packed_leg.begin(),
-                          packed_leg.end(),
-                          phantom_node_pair,
-                          raw_route_data.unpacked_path_segments.front());
+        reverse_heap.Insert(target_phantom.forward_segment_id.id,
+                            target_phantom.GetForwardWeightPlusOffset(),
+                            {target_phantom.forward_segment_id.id, 0});
     }
+
+    if (target_phantom.reverse_segment_id.enabled)
+    {
+        reverse_heap.Insert(target_phantom.reverse_segment_id.id,
+                            target_phantom.GetReverseWeightPlusOffset(),
+                            {target_phantom.reverse_segment_id.id, 0});
+    }
+
+    const bool constexpr DO_NOT_FORCE_LOOPS =
+        false; // prevents forcing of loops, since offsets are set correctly
+
+    EdgeWeight mld_weight = INVALID_EDGE_WEIGHT;
+
+    CALLGRIND_START_INSTRUMENTATION;
+    auto unpacked_path = UnpackSubPath(
+        facade, forward_heap, reverse_heap, highest_level, util::INVALID_CELL_ID, mld_weight);
+    CALLGRIND_STOP_INSTRUMENTATION;
+
+    if (unpacked_path.empty())
+    {
+        raw_route_data.shortest_path_length = INVALID_EDGE_WEIGHT;
+        raw_route_data.alternative_path_length = INVALID_EDGE_WEIGHT;
+        return;
+    }
+
+    raw_route_data.shortest_path_length = mld_weight;
+    raw_route_data.unpacked_path_segments.resize(1);
+    raw_route_data.source_traversed_in_reverse.push_back(
+        (unpacked_path.front() != phantom_node_pair.source_phantom.forward_segment_id.id));
+    raw_route_data.target_traversed_in_reverse.push_back(
+        (unpacked_path.back() != phantom_node_pair.target_phantom.forward_segment_id.id));
+
+    super::UnpackPath(
+        facade, unpacked_path, phantom_node_pair, raw_route_data.unpacked_path_segments.front());
 }
 } // namespace routing_algorithms
 } // namespace engine

@@ -47,10 +47,21 @@ class MultiLayerDijkstraRouting final : public BasicRoutingInterface
                      SearchEngineData::MultiLayerDijkstraHeap &forward_heap,
                      SearchEngineData::MultiLayerDijkstraHeap &reverse_heap,
                      util::LevelID highest_level,
+                     util::CellID limit_to_cell,
                      NodeID &middle_node_id,
                      EdgeWeight &upper_bound,
                      EdgeWeight min_edge_offset,
                      const bool forward_direction) const;
+
+    std::vector<NodeID>
+    UnpackSubPath(const std::shared_ptr<const datafacade::BaseDataFacade> facade,
+                  SearchEngineData::MultiLayerDijkstraHeap &forward_heap,
+                  SearchEngineData::MultiLayerDijkstraHeap &reverse_heap,
+                  util::LevelID highest_level,
+                  util::CellID highest_level_parent_cell,
+                  EdgeWeight &mld_weight,
+                  const std::string &padding = std::string() // TODO: used only in output padding
+                  ) const;
 };
 
 } // namespace routing_algorithms

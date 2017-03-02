@@ -26,8 +26,11 @@ struct ManyToManyHeapData : HeapData
 
 struct MultiLayerDijkstraHeapData : HeapData
 {
-    util::LevelID level;
-    MultiLayerDijkstraHeapData(NodeID p, util::LevelID level) : HeapData(p), level(level) {}
+    util::LevelID edge_level; // edge level: 0 - base graph edge, 1 .. - overlay graph level
+    MultiLayerDijkstraHeapData(NodeID p, util::LevelID edge_level)
+        : HeapData(p), edge_level(edge_level)
+    {
+    }
 };
 
 struct SearchEngineData

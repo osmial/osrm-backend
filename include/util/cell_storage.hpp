@@ -105,6 +105,23 @@ template <bool UseShareMemory> class CellStorage
         };
 
       public:
+        // TODO: very ineffective move to preprocessing in customization
+        auto IsSourceNode(NodeID node) const
+        {
+            auto range = GetOutWeight(node);
+            return !std::all_of(range.begin(), range.end(), [](const auto weight) {
+                return weight == INVALID_EDGE_WEIGHT;
+            });
+        }
+
+        auto IsDestinationNode(NodeID node) const
+        {
+            auto range = GetInWeight(node);
+            return !std::all_of(range.begin(), range.end(), [](const auto weight) {
+                return weight == INVALID_EDGE_WEIGHT;
+            });
+        }
+
         auto GetOutWeight(NodeID node) const
         {
             auto first = source_boundary, last = source_boundary + num_source_nodes;
